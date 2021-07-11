@@ -123,7 +123,7 @@ pub fn perform() -> ! {
         term.clear_last_lines(last_line_count).unwrap();
         last_line_count = print_device_display_info(&devs);
 
-        print!("<Press Ctrl-C to stop live update>");
+        print!("<Press Ctrl-C to stop live updates>");
         io::stdout().flush().unwrap();
     }
 }
