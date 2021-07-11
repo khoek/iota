@@ -7,6 +7,7 @@ use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
 pub enum CommandRoot {
+    Status(SubcommandStatus),
     List(SubcommandList),
     Ota(SubcommandOta),
     Restart(SubcommandRestart),
@@ -17,6 +18,12 @@ pub enum CommandRoot {
 #[derive(StructOpt, Debug)]
 #[structopt(name = "list")]
 pub struct SubcommandList {}
+
+#[derive(StructOpt, Debug)]
+#[structopt(name = "status")]
+pub struct SubcommandStatus {
+    device: String,
+}
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "ota")]
@@ -45,6 +52,10 @@ pub struct SubcommandRollback {
 
 fn command_list(_: SubcommandList) {
     op::list::perform();
+}
+
+fn command_status(cmd: SubcommandStatus) {
+    op::perform_op(op::status::Operation {}, &cmd.device);
 }
 
 fn command_ota(cmd: SubcommandOta) {
@@ -93,6 +104,7 @@ fn command_rollback(cmd: SubcommandRollback) {
 fn main() {
     match CommandRoot::from_args() {
         CommandRoot::List(cmd) => command_list(cmd),
+        CommandRoot::Status(cmd) => command_status(cmd),
         CommandRoot::Ota(cmd) => command_ota(cmd),
         CommandRoot::Restart(cmd) => command_restart(cmd),
         CommandRoot::Validate(cmd) => command_validate(cmd),

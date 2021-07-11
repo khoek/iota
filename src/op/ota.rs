@@ -43,7 +43,7 @@ pub struct Operation<'a> {
 }
 
 impl op::Operation for Operation<'_> {
-    fn body(
+    fn perform(
         &self,
         topics: &super::TopicBundle,
         (client, rx): (&mut rumqttc::Client, &Receiver<mqtt::MqttPacket>),
@@ -134,8 +134,8 @@ impl op::Operation for Operation<'_> {
         op::ExitDisposition::Ok
     }
 
-    fn should_wait_for_power_cycle(&self) -> bool {
-        false
+    fn get_wait_strategy(&self) -> Option<op::PostOperationWaitStrategy> {
+        Some(op::PostOperationWaitStrategy::IdMessage)
     }
 
     fn exit_ok_is_finished_waiting(
@@ -153,13 +153,6 @@ impl op::Operation for Operation<'_> {
                 }
 
                 if current_id.ota_info.running_addr == original_id.ota_info.next_update_addr {
-                    println!(
-                        "{}: Device restarted, OTA successful!",
-                        op::PrettyHeader::Success
-                    );
-                    println!("Use `iota validate <device>` to mark the update as permanent.");
-                    println!("Use `iota rollback <device>` to rollback to the previous version.");
-
                     return true;
                 }
 
@@ -177,5 +170,14 @@ impl op::Operation for Operation<'_> {
         current_id: &decode::DecodedIdMessage,
     ) -> bool {
         current_id.ota_info.running_ota_state != model::OtaState::PendingVerify
+    }
+
+    fn print_completed_message(&self) {
+        println!(
+            "{}: Device restarted, OTA successful!",
+            op::PrettyHeader::Success
+        );
+        println!("Use `iota validate <device>` to mark the update as permanent.");
+        println!("Use `iota rollback <device>` to rollback to the previous version.");
     }
 }

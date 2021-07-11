@@ -121,7 +121,7 @@ pub struct Operation {
 }
 
 impl op::Operation for Operation {
-    fn body(
+    fn perform(
         &self,
         topics: &super::TopicBundle,
         (client, _): (&mut rumqttc::Client, &Receiver<mqtt::MqttPacket>),
@@ -179,8 +179,8 @@ impl op::Operation for Operation {
         op::ExitDisposition::Ok
     }
 
-    fn should_wait_for_power_cycle(&self) -> bool {
-        false
+    fn get_wait_strategy(&self) -> Option<op::PostOperationWaitStrategy> {
+        Some(op::PostOperationWaitStrategy::IdMessage)
     }
 
     fn exit_ok_is_finished_waiting(
@@ -188,15 +188,14 @@ impl op::Operation for Operation {
         original_id: &decode::DecodedIdMessage,
         current_id: &decode::DecodedIdMessage,
     ) -> bool {
-        let is_done = self.mark.is_command_completed(original_id, current_id);
-        if is_done {
-            println!(
-                "{}: Operation {} (of running partition) successful!",
-                PrettyHeader::Success,
-                self.mark
-            );
-        }
+        self.mark.is_command_completed(original_id, current_id)
+    }
 
-        is_done
+    fn print_completed_message(&self) {
+        println!(
+            "{}: Operation {} (of running partition) successful!",
+            PrettyHeader::Success,
+            self.mark
+        );
     }
 }

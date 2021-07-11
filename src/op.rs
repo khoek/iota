@@ -2,6 +2,7 @@ pub mod list;
 pub mod mark;
 pub mod ota;
 pub mod restart;
+pub mod status;
 
 use console::{style, Term};
 use rumqttc::QoS;
@@ -58,15 +59,20 @@ pub enum ExitDisposition {
     Abort,
 }
 
+pub(crate) enum PostOperationWaitStrategy {
+    PowerCycle,
+    IdMessage,
+}
+
 pub(crate) trait Operation {
-    fn body(
+    fn perform(
         &self,
         topics: &TopicBundle,
         mqtt: (&mut rumqttc::Client, &Receiver<MqttPacket>),
         id: &decode::DecodedIdMessage,
     ) -> ExitDisposition;
 
-    fn should_wait_for_power_cycle(&self) -> bool;
+    fn get_wait_strategy(&self) -> Option<PostOperationWaitStrategy>;
 
     fn exit_ok_is_finished_waiting(
         &self,
@@ -83,6 +89,8 @@ pub(crate) trait Operation {
     ) -> bool {
         unreachable!()
     }
+
+    fn print_completed_message(&self);
 }
 
 fn perform_op_once<Op: Operation>(op: Op, device_name: &str) -> ExitDisposition {
@@ -135,39 +143,44 @@ fn perform_op_once<Op: Operation>(op: Op, device_name: &str) -> ExitDisposition 
     println!("{}", original_id.ota_info.fmt);
     println!();
 
-    let ed = op.body(&topics, (&mut client, &rx), &original_id);
+    let ed = op.perform(&topics, (&mut client, &rx), &original_id);
 
     if let ExitDisposition::Abort = ed {
         return ExitDisposition::Abort;
     }
 
-    if op.should_wait_for_power_cycle() {
-        println!("Waiting for device 'Down' message...");
+    // The let binding forces the match to be exhaustive.
+    let _ = match (&ed, op.get_wait_strategy()) {
+        (ExitDisposition::Abort, _) => {}
+        (_, None) => {}
+        (_, Some(PostOperationWaitStrategy::PowerCycle)) => {
+            println!("Waiting for device 'Down' message...");
 
-        mqtt_wait_for_status_message(&topics.info_status, model::DeviceState::Down, &rx);
+            mqtt_wait_for_status_message(&topics.info_status, model::DeviceState::Down, &rx);
 
-        term.clear_last_lines(1).unwrap();
-        println!("Waiting for device 'Up' message...");
+            term.clear_last_lines(1).unwrap();
+            println!("Waiting for device 'Up' message...");
 
-        mqtt_wait_for_status_message(&topics.info_status, model::DeviceState::Up, &rx);
+            mqtt_wait_for_status_message(&topics.info_status, model::DeviceState::Up, &rx);
 
-        println!("Device reconnected!");
-    }
-
-    match ed {
-        ExitDisposition::Ok => {
+            println!("Device reconnected!");
+        }
+        (ExitDisposition::Ok, Some(PostOperationWaitStrategy::IdMessage)) => {
             println!();
             mqtt_wait_for_id_condition(&topics, &rx, &original_id, |o_id, c_id| {
                 op.exit_ok_is_finished_waiting(o_id, c_id)
-            })
+            });
         }
-        ExitDisposition::Retry => {
+        (ExitDisposition::Retry, Some(PostOperationWaitStrategy::IdMessage)) => {
             println!();
             mqtt_wait_for_id_condition(&topics, &rx, &original_id, |o_id, c_id| {
                 op.exit_retry_is_finished_waiting(o_id, c_id)
-            })
+            });
         }
-        ExitDisposition::Abort => unreachable!(),
+    };
+
+    if let ExitDisposition::Ok = ed {
+        op.print_completed_message();
     }
 
     ed
